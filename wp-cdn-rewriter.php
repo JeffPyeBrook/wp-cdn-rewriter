@@ -130,6 +130,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 *                       if no path is specified.
 	 * @param string $plugin The plugin file path to be relative to. Blank string if no plugin
 	 *                       is specified.
+	 *
+	 * @return string rewritten or unaltered url
 	 */
 	function wpcdn_plugins_url( $url, $path, $plugin ) {
 		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
@@ -151,6 +153,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 *
 	 * @param string $url Script loader source path.
 	 * @param string $handle Script handle.
+	 *
+	 * @return string rewritten or unaltered url
 	 */
 	function wpcdn_script_loader_src( $url, $handle ) {
 		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
@@ -181,6 +185,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 * @param string $html The link tag for the enqueued style.
 	 * @param string $handle The style's registered handle.
 	 * @param string $href The stylesheet's source URL.
+	 *
+	 * @return string html with rewritten or unaltered url
 	 */
 	function wpcdn_style_loader_href( $html, $handle, $href ) {
 
@@ -249,6 +255,10 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 		return $s;
 	}
 
+	/**
+	 * Get the REGEX that will match static resources in HTML
+	 * @return string
+	 */
 	function cdn_rewriter_regex() {
 		if ( ! defined( 'PBCI_CDN_FROM' ) ) {
 			if ( defined( 'CDN_REWRITER_LOG' ) ) {
@@ -274,6 +284,12 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
 	add_filter( 'autoptimize_filter_base_replace_cdn', 'cdn_replace_direct_url_with_cdn', 10, 9999 );
 
+	/**
+	 * Replace the domain in a url with its cdn rewritten version
+	 * @param $url
+	 *
+	 * @return string rewritten or unaltered url
+	 */
 	function cdn_replace_direct_url_with_cdn( $url ) {
 		$new_url = preg_replace_callback( cdn_rewriter_regex(), 'cdn_rewriter_callback', $url );
 
@@ -322,14 +338,12 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
 	function wpcdn_rewite_autoptimize( $content ) {
 		$content = wpcdn_rewriter_do_the_work( $content );
-
 		return $content;
 	}
 
 
 	function wpcdn_relative_plugins_url( $url, $path, $plugin ) {
 		$url = str_replace( array( 'http://', 'http://' ), '//', $url );
-
 		return $url;
 	}
 
