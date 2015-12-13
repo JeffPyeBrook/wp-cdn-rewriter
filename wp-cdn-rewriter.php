@@ -445,7 +445,7 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 				return $url;
 			}
 
-			if ( true || defined( 'CDN_REWRITER_LOG' ) ) {
+			if ( defined( 'CDN_REWRITER_LOG' ) ) {
 				error_log( __FUNCTION__ . ' going to rewrite url ' . $url );
 			}
 
