@@ -18,45 +18,66 @@
 **
 ** Contact Pye Brook Company, Inc. at info@pyebrook.com for more information.
 **
-** This program is distributed in the hope that it will be useful, but WITHOUT ANY 
+** This software is distributed in the hope that it will be useful, but WITHOUT ANY
 ** WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR 
 ** A PARTICULAR PURPOSE. 
 **
 */
 
+
+/*
+ * A constant we use to adjust the priority of the filters this plugin sts up, override in wp-config.php or elsewhere
+ */
+define( 'WPCDN_FILTER_PRIORITY', 100 );
+
+$jquery_scripts = false;
+
 if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
-	add_action( 'plugins_loaded', 'cdn_setup_rewrites' );
+	/**
+	 * setup filters and actions that will adjust urls to static resources
+	 */
+	function wpcdn_setup_rewrites() {
+		/*
+		 * These are the filters that can intercept URLs to static resources before they are embedded in the
+		 * page output
+		 */
+		add_filter( 'script_loader_src', 'wpcdn_script_loader_src', WPCDN_FILTER_PRIORITY, 2 );
+		add_filter( 'style_loader_tag', 'wpcdn_style_loader_href', WPCDN_FILTER_PRIORITY, 3 );
+		add_filter( 'admin_url', 'wpcdn_filter_admin_url', WPCDN_FILTER_PRIORITY, 3 );
+		add_filter( 'plugins_url', 'wpcdn_plugins_url', WPCDN_FILTER_PRIORITY, 3 );
+		add_filter( 'includes_url', 'wpcdn_includes_url', WPCDN_FILTER_PRIORITY, 2 );
 
-	function cdn_setup_rewrites() {
-		if ( ! function_exists( 'autoptimize_end_buffering' ) ) {
-			if ( ! is_admin() ) {
-				//add_action( 'template_redirect', 'cdn_rewriter_setup' );
-			}
+		// we can do some special things if the autoptimize plugin is installed and enabled
+		if ( function_exists( 'autoptimize_end_buffering' ) ) {
+			add_filter( 'autoptimize_filter_base_replace_cdn', 'wpcdn_autoptimize_filter_base_replace_cdn', WPCDN_FILTER_PRIORITY, 1 );
+			add_filter( 'autoptimize_filter_cssjs_multidomain', 'wpcdn_autoptimize_filter_cssjs_multidomain', WPCDN_FILTER_PRIORITY, 1 );
 
-			add_filter( 'script_loader_src', 'cdn_script_loader_src', 10, 2 );
-			add_filter( 'style_loader_tag', 'cdn_style_loader_href', 10, 3 );
-			add_filter( 'admin_url', 'cdn_filter_admin_url', 10, 3 );
-			add_filter( 'plugins_url', 'cdn_plugins_url', 10, 3 );
-			add_filter( 'includes_url', 'cdn_includes_url', 10, 2 );
+			/*
+			 * This will re-process the entire output buffer
+			 */
+			//add_filter( 'autoptimize_html_after_minify', 'wpcdn_rewite_autoptimize', WPCDN_FILTER_PRIORITY, 1 );
 
-
-		} else {
-			//add_filter( 'autoptimize_html_after_minify', 'rewite_autoptimize', 10, 1 );
 		}
 
+		global $jquery_scripts;
+		$jquery_scripts = array();
+
 	}
+
+	add_action( 'plugins_loaded', 'wpcdn_setup_rewrites' );
+
 
 	/**
 	 * Filter the URL to the includes directory.
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param string $url  The complete URL to the includes directory including scheme and path.
+	 * @param string $url The complete URL to the includes directory including scheme and path.
 	 * @param string $path Path relative to the URL to the wp-includes directory. Blank string
 	 *                     if no path is specified.
 	 */
-	function cdn_includes_url(  $url, $path  ) {
+	function wpcdn_includes_url( $url, $path ) {
 		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
 
 		if ( $rewritten_url != $url ) {
@@ -75,11 +96,11 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param string   $url     The complete admin area URL including scheme and path.
-	 * @param string   $path    Path relative to the admin area URL. Blank string if no path is specified.
+	 * @param string $url The complete admin area URL including scheme and path.
+	 * @param string $path Path relative to the admin area URL. Blank string if no path is specified.
 	 * @param int|null $blog_id Blog ID, or null for the current blog.
 	 */
-	function cdn_filter_admin_url( $url, $path, $blog_id ) {
+	function wpcdn_filter_admin_url( $url, $path, $blog_id ) {
 
 		if ( 'admin-ajax.php' == $path ) {
 
@@ -104,13 +125,13 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 *
 	 * @since 2.8.0
 	 *
-	 * @param string $url    The complete URL to the plugins directory including scheme and path.
-	 * @param string $path   Path relative to the URL to the plugins directory. Blank string
+	 * @param string $url The complete URL to the plugins directory including scheme and path.
+	 * @param string $path Path relative to the URL to the plugins directory. Blank string
 	 *                       if no path is specified.
 	 * @param string $plugin The plugin file path to be relative to. Blank string if no plugin
 	 *                       is specified.
 	 */
-	function cdn_plugins_url(  $url, $path, $plugin ) {
+	function wpcdn_plugins_url( $url, $path, $plugin ) {
 		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
 
 		if ( $rewritten_url != $url ) {
@@ -123,8 +144,15 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 		return $url;
 	}
 
-
-	function cdn_script_loader_src( $url, $handle ) {
+	/**
+	 * Filter the script loader source.
+	 *
+	 * @since 2.2.0
+	 *
+	 * @param string $url Script loader source path.
+	 * @param string $handle Script handle.
+	 */
+	function wpcdn_script_loader_src( $url, $handle ) {
 		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
 
 		if ( $rewritten_url != $url ) {
@@ -132,6 +160,13 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 			if ( defined( 'CDN_REWRITER_LOG' ) ) {
 				error_log( __FUNCTION__ . ' ' . $rewritten_url );
 			}
+		}
+
+		$script_filename = pathinfo( parse_url( $url, PHP_URL_PATH ) , PATHINFO_BASENAME );
+
+		if ( 0=== strpos( $script_filename, 'jquery.' ) ) {
+			global $jquery_scripts;
+			$jquery_scripts[] = $script_filename;
 		}
 
 		return $url;
@@ -143,11 +178,11 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 * @since 2.6.0
 	 * @since 4.3.0 Introduced the `$href` parameter.
 	 *
-	 * @param string $html   The link tag for the enqueued style.
+	 * @param string $html The link tag for the enqueued style.
 	 * @param string $handle The style's registered handle.
-	 * @param string $href   The stylesheet's source URL.
+	 * @param string $href The stylesheet's source URL.
 	 */
-	function cdn_style_loader_href( $html, $handle, $href ) {
+	function wpcdn_style_loader_href( $html, $handle, $href ) {
 
 		// $tag = apply_filters( 'style_loader_tag', "<link rel='$rel' id='$handle-css' $title href='$href' type='text/css' media='$media' />\n", $handle, $href );
 		if ( defined( 'CDN_REWRITER_LOG' ) ) {
@@ -158,51 +193,16 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	}
 
 	/**
-	 * attach the rewriter
-	 */
-	function cdn_rewriter_setup() {
-		ob_start( 'cdn_rewriter_do_the_work', 0 );
-	}
-
-
-	/**
-	 * match urls to static resurces in the html content being sent to the user browser
+	 * attach the rewriter that will act on the complete page output
 	 *
-	 * @param $original_content
+	 * NOTE: this is a pretty expensive action on a big page, a regex preg-match against a
+	 *       page buffer that can be 500K or more will take some memory and a little bit of time.
 	 *
-	 * @return string
+	 *       If everything is working and there aren't any other plugins changing the urls to static
+	 *       resournces this full buffer scan should not be necessary
 	 */
-	function cdn_rewriter_do_the_work( &$original_content ) {
-		static $already_did_this = false;
-
-		if ( defined( 'CDN_REWRITER_LOG' ) ) {
-			error_log( __FUNCTION__ . ' rewriting page text on flush' );
-		}
-
-		if ( ! $already_did_this ) {
-			$already_did_this = true;
-
-			$regex = cdn_rewriter_regex();
-			$new_content = preg_replace_callback( $regex, 'cdn_rewriter_callback', $original_content, -1, $count );
-
-			if ( empty( $new_content ) ) {
-				error_log( __FILE__ . ' ' . __LINE__ . ' no content rewrite returned');
-				$new_content = $original_content;
- 			} else {
-				if ( defined( 'CDN_REWRITER_LOG' ) ) {
-					error_log( __FUNCTION__ . ' ' . $count . ' replacements made' );
-				}
-			}
-		} else {
-			$new_content = $original_content;
-		}
-
-		return $new_content;
-	}
-
-	function rewite_autoptimize( $content ) {
-		$content = cdn_rewriter_do_the_work( $content );
-		return $content;
+	function wpcdn_rewriter_setup() {
+		ob_start( 'wpcdn_rewriter_do_the_work', 0 );
 	}
 
 	/**
@@ -219,9 +219,9 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	 */
 	function cdn_rewriter_callback( $matches ) {
 
-//		if ( defined( 'CDN_REWRITER_LOG' ) ) {
-//			error_log( $matches[1] . '+' . $matches[2] . '+' . $matches[3] . '+' . $matches[4]  );
-//		}
+		if ( defined( 'CDN_REWRITER_LOG' ) ) {
+			error_log( __FUNCTION__ . ' ' . $matches[1] . '+' . $matches[2] . '+' . $matches[3] . '+' . $matches[4] );
+		}
 
 		if ( defined( 'PBCI_CDN_TO' ) ) {
 			$cdn_to = PBCI_CDN_TO;
@@ -233,7 +233,7 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
 			// some entirely unnecessary safety checks
 			if ( false ) {
-			//if ( false && empty ( $matches[1] ) || empty( $matches[2] ) || empty( $matches[3] ) || empty( $matches[4] ) ) {
+				//if ( false && empty ( $matches[1] ) || empty( $matches[2] ) || empty( $matches[3] ) || empty( $matches[4] ) ) {
 				error_log( __FUNCTION__ . '::' . __LINE__ . ' ERROR url replacement callback found invalid arguments' );
 				error_log( var_export( $matches, true ) );
 				$s = $matches[0];
@@ -260,18 +260,19 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 		}
 
 		$directories_to_rewrite = 'wp\-content|wp\-includes';
-		$hosts_to_rewrite = 'www.' . $cdn_from . '|' . $cdn_from;
+		$hosts_to_rewrite       = 'www.' . $cdn_from . '|' . $cdn_from;
 
 		// "http://sparklegear.local/wp-includes/js/wp-emoji-release.min.js?ver=4.3.1"
 		//1.	[1-8]	`http://`
 		//2.	[8-25]	`sparklegear.local`
 		//3.	[25-61]	`/wp-includes/js/wp-emoji-release.min`
 		//4.	[61-64]	`.js` ( non-capturing, so don't include in the replacement )
-		$regex = '#(?:^|(?<=[\s(\"\']))(http:\/\/|https:\/\/|\/\/)(' . $hosts_to_rewrite . ')(\/(?:' .  $directories_to_rewrite .')\/[^\s)\"\']*(?=(\.(?:jp?g|png|css|eot|woff|woff2|js|gif|ico|gif))))#i';
+		$regex = '#(?:^|(?<=[\s(\"\']))(http:\/\/|https:\/\/|\/\/)(' . $hosts_to_rewrite . ')(\/(?:' . $directories_to_rewrite . ')\/[^\s)\"\']*(?=(\.(?:jp?g|png|css|eot|woff|woff2|js|gif|ico|gif))))#i';
+
 		return $regex;
 	}
 
-	add_filter( 'autoptimize_filter_base_replace_cdn', 'cdn_replace_direct_url_with_cdn' , 10 ,9999);
+	add_filter( 'autoptimize_filter_base_replace_cdn', 'cdn_replace_direct_url_with_cdn', 10, 9999 );
 
 	function cdn_replace_direct_url_with_cdn( $url ) {
 		$new_url = preg_replace_callback( cdn_rewriter_regex(), 'cdn_rewriter_callback', $url );
@@ -282,70 +283,231 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
 		return $url;
 	}
-}
 
-add_filter( 'plugins_url', 'relative_plugins_url', 10, 3 );
+	/**
+	 * match urls to static resurces in the html content being sent to the user browser
+	 *
+	 * @param $original_content
+	 *
+	 * @return string
+	 */
+	function wpcdn_rewriter_do_the_work( &$original_content ) {
+		static $already_did_this = false;
 
-function relative_plugins_url( $url, $path, $plugin ) {
-	$url = str_replace( array( 'http://', 'http://' ), '//', $url );
-	return $url;
-}
-
-if ( ! is_admin() ) {
-	add_filter( 'pre_option_autoptimize_cdn_url', 'pre_option_autoptimize_cdn_url', 10, 1 );
-
-	function pre_option_autoptimize_cdn_url( $option_value ) {
-		if ( defined( 'PBCI_CDN_TO' ) ) {
-			$option_value = '//' . PBCI_CDN_TO;
-		}
-
-		return $option_value;
-	}
-}
-
-
-add_filter( "site_icon_meta_tags", 'filter_site_icon_meta_tags', 10, 1 );
-
-function filter_site_icon_meta_tags( $meta_tags ) {
-	foreach ( $meta_tags as $index => $meta_tag ) {
-		$meta_tags[$index] = str_replace( array( 'http://', 'http://' ), '//', $meta_tag );
-	}
-
-	return $meta_tags;
-}
-
-add_filter( 'wp_get_attachment_image_src', 'cdn_rewriter_attachment_url', 10 , 4 );
-
-function cdn_rewriter_attachment_url(  $image, $attachment_id, $size, $icon ) {
-	if ( is_array( $image ) && isset( $image[0] ) ) {
-		$image[0]  = cdn_replace_direct_url_with_cdn( $image[0] );
 		if ( defined( 'CDN_REWRITER_LOG' ) ) {
-			error_log( __FUNCTION__ . ' ' . $image[0] );
+			error_log( __FUNCTION__ . ' rewriting page text on flush' );
+		}
+
+		if ( ! $already_did_this ) {
+			$already_did_this = true;
+
+			$regex       = cdn_rewriter_regex();
+			$new_content = preg_replace_callback( $regex, 'cdn_rewriter_callback', $original_content, - 1, $count );
+
+			if ( empty( $new_content ) ) {
+				error_log( __FILE__ . ' ' . __LINE__ . ' no content rewrite returned' );
+				$new_content = $original_content;
+			} else {
+				if ( defined( 'CDN_REWRITER_LOG' ) ) {
+					error_log( __FUNCTION__ . ' ' . $count . ' replacements made' );
+				}
+			}
+		} else {
+			$new_content = $original_content;
+		}
+
+		return $new_content;
+	}
+
+
+	function wpcdn_rewite_autoptimize( $content ) {
+		$content = wpcdn_rewriter_do_the_work( $content );
+
+		return $content;
+	}
+
+
+	function wpcdn_relative_plugins_url( $url, $path, $plugin ) {
+		$url = str_replace( array( 'http://', 'http://' ), '//', $url );
+
+		return $url;
+	}
+
+	add_filter( 'plugins_url', 'wpcdn_relative_plugins_url', WPCDN_FILTER_PRIORITY, 3 );
+
+
+	if ( ! is_admin() ) {
+		function wpcdn_pre_option_autoptimize_cdn_url( $option_value ) {
+			if ( defined( 'PBCI_CDN_TO' ) ) {
+				$option_value = '//' . PBCI_CDN_TO;
+			}
+
+			return $option_value;
+		}
+
+		add_filter( 'wpcdn_pre_option_autoptimize_cdn_url', 'wpcdn_pre_option_autoptimize_cdn_url', WPCDN_FILTER_PRIORITY, 1 );
+	}
+
+
+	if ( ! function_exists( 'wpcdn_filter_site_icon_meta_tags' ) ) {
+		/**
+		 * Rewrite URLs that point to the page meta tags
+		 *
+		 * @param $meta_tags
+		 *
+		 * @return mixed
+		 */
+		function wpcdn_filter_site_icon_meta_tags( $meta_tags ) {
+			foreach ( $meta_tags as $index => $meta_tag ) {
+
+				$rewritten_url = cdn_replace_direct_url_with_cdn( $meta_tag );
+
+				if ( $rewritten_url != $meta_tag ) {
+					$url = $rewritten_url;
+					if ( defined( 'CDN_REWRITER_LOG' ) ) {
+						error_log( __FUNCTION__ . ' ' . $rewritten_url );
+					}
+				}
+			}
+
+			return $meta_tags;
+		}
+
+		add_filter( "site_icon_meta_tags", 'wpcdn_filter_site_icon_meta_tags', WPCDN_FILTER_PRIORITY, 1 );
+	}
+
+	if ( ! function_exists( 'wpcdn_rewriter_attachment_url' ) ) {
+		/**
+		 * Filter the image source attributes array
+		 *
+		 * @since 1.2.3.
+		 *
+		 * @param string $src The image source attributes.
+		 * @param int $image_id The ID for the image.
+		 * @param string|array $size The requested image size.
+		 * @param bool Use a media icon to represent the attachment.
+		 *
+		 * @return array rewritten image source attributes array
+		 */
+		function wpcdn_rewriter_attachment_url( $image, $attachment_id, $size, $icon ) {
+			if ( is_array( $image ) && isset( $image[0] ) ) {
+				$image[0] = cdn_replace_direct_url_with_cdn( $image[0] );
+				if ( defined( 'CDN_REWRITER_LOG' ) ) {
+					error_log( __FUNCTION__ . ' ' . $image[0] );
+				}
+			}
+
+			return $image;
+		}
+
+		add_filter( 'wp_get_attachment_image_src', 'wpcdn_rewriter_attachment_url', WPCDN_FILTER_PRIORITY, 4 );
+	}
+
+	if ( ! function_exists( 'wpcdn_rewriter_make_get_image_src' ) ) {
+		/**
+		 * Filter the image source attributes for Theme Foundry's Make family of themes.
+		 *
+		 * @since 1.2.3.
+		 *
+		 * @param string $src The image source attributes.
+		 * @param int $image_id The ID for the image.
+		 * @param bool $size The requested image size.
+		 *
+		 * @return array rewritten image source attributes array
+		 */
+		function wpcdn_rewriter_make_get_image_src( $src, $image_id, $size ) {
+
+			if ( is_array( $src ) && isset( $src[0] ) ) {
+				$src[0] = cdn_replace_direct_url_with_cdn( $src[0] );
+				if ( defined( 'CDN_REWRITER_LOG' ) ) {
+					error_log( __FUNCTION__ . ' ' . $src[0] );
+				}
+			}
+
+			return $src;
+		}
+
+		add_filter( 'make_get_image_src', 'wpcdn_rewriter_make_get_image_src', WPCDN_FILTER_PRIORITY, 3 );
+	}
+
+	if ( ! function_exists( 'wpcdn_autoptimize_filter_base_replace_cdn' ) ) {
+		/**
+		 * Filter the URL that the autoptimize plugin uses for scripts
+		 * see //github.com/zytzagoo/autoptimize
+		 *
+		 * @param string $url The complete URL to the plugins directory including scheme and path.
+		 *
+		 * @return string url to the script rewritten to come from the cdn
+		 */
+		function wpcdn_autoptimize_filter_base_replace_cdn( $url ) {
+
+			if ( 0 === strpos( $url, 'data:image' ) ) {
+				return $url;
+			}
+
+			if ( true || defined( 'CDN_REWRITER_LOG' ) ) {
+				error_log( __FUNCTION__ . ' going to rewrite url ' . $url );
+			}
+
+			/*
+			 * make sure the urls is rewritten to our cdn even if it was rewritten using the
+			 * autoptimize cdn setting
+			 */
+			$h = parse_url( $url, PHP_URL_HOST );
+			if ( ! empty( $h ) ) {
+				$site_url = parse_url( get_site_url(), PHP_URL_HOST );
+				if ( $site_url !== $h ) {
+					$rewritten_url = str_replace( $h, $site_url, $url );
+				}
+			}
+
+			$rewritten_url = cdn_replace_direct_url_with_cdn( $rewritten_url );
+
+			if ( $rewritten_url != $url ) {
+				$url = $rewritten_url;
+				if ( defined( 'CDN_REWRITER_LOG' ) ) {
+					error_log( __FUNCTION__ . ' ' . $rewritten_url );
+				}
+			}
+
+			return $url;
 		}
 	}
 
-	return $image;
-}
+	if ( ! function_exists( 'wpcdn_autoptimize_filter_cssjs_multidomain' ) ) {
+		function wpcdn_autoptimize_filter_cssjs_multidomain( $multidomains ) {
+			if ( ! in_array( PBCI_CDN_TO, $multidomains ) ) {
+				$multidomains[] = PBCI_CDN_TO;
+			}
 
-/**
- * Filter the image source attributes.
- *
- * @since 1.2.3.
- *
- * @param string    $src         The image source attributes.
- * @param int       $image_id    The ID for the image.
- * @param bool      $size        The requested image size.
- */
-function cdn_rewriter_make_get_image_src(  $src, $image_id, $size ) {
+			return $multidomains;
+		}
+	}
 
-	if ( is_array( $src ) && isset( $src[0] ) ) {
-		$src[0]  = cdn_replace_direct_url_with_cdn( $src[0] );
+	/**
+	 * JS optimization exclude strings, as configured in admin page.
+	 *
+	 * @param string $exclude : comma-seperated list of exclude strings
+	 *
+	 * @return string comma-seperated list of exclude strings
+	 */
+	function wpcdn_ao_override_jsexclude_jquery( $exclude = '' ) {
+		global $jquery_scripts;
+
+		if ( ! empty( $jquery_scripts ) ) {
+			if ( ! empty( $exclude ) ) {
+				$exclude .= ',';
+			}
+			$exclude .= implode( ',', $jquery_scripts );
+		}
+
 		if ( defined( 'CDN_REWRITER_LOG' ) ) {
-			error_log( __FUNCTION__ . ' ' . $src[0] );
+			error_log( __FUNCTION__ . ' ' . $exclude );
 		}
+
+		return $exclude;
 	}
 
-	return $src;
-}
+	add_filter( 'autoptimize_filter_js_exclude', 'wpcdn_ao_override_jsexclude_jquery', WPCDN_FILTER_PRIORITY, 1 );
 
-add_filter( 'make_get_image_src', 'cdn_rewriter_make_get_image_src', 10, 3 );
+}
