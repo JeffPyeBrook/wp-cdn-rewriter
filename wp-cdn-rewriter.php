@@ -74,7 +74,6 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	function wpcdn_wp_calculate_image_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
 		foreach ( $sources as $index => $source ) {
 			$sources[$index]['url']  = cdn_replace_direct_url_with_cdn( $source['url'] );
-			error_log( $sources[$index]['url'] );
 		}
 
 		return $sources;
