@@ -47,6 +47,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 		add_filter( 'admin_url', 'wpcdn_filter_admin_url', WPCDN_FILTER_PRIORITY, 3 );
 		add_filter( 'plugins_url', 'wpcdn_plugins_url', WPCDN_FILTER_PRIORITY, 3 );
 		add_filter( 'includes_url', 'wpcdn_includes_url', WPCDN_FILTER_PRIORITY, 2 );
+		add_filter( 'wp_calculate_image_srcset', 'wpcdn_wp_calculate_image_srcset', WPCDN_FILTER_PRIORITY, 5 );
+
 
 		// we can do some special things if the autoptimize plugin is installed and enabled
 		if ( function_exists( 'autoptimize_end_buffering' ) ) {
@@ -67,6 +69,14 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 
 	add_action( 'plugins_loaded', 'wpcdn_setup_rewrites' );
 
+	function wpcdn_wp_calculate_image_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
+		foreach ( $sources as $index => $source ) {
+			$sources[$index]['url']  = cdn_replace_direct_url_with_cdn( $source['url'] );
+			error_log( $sources[$index]['url'] );
+		}
+
+		return $sources;
+	}
 
 	/**
 	 * Filter the URL to the includes directory.
@@ -245,7 +255,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 				$s = $matches[0];
 			} else {
 				// put the url to the static resource back together
-				$s = '//' . $cdn_to . $matches[3];
+				//$s = '//' . $cdn_to . $matches[3];
+				$s = $cdn_to . $matches[3];
 				if ( defined( 'CDN_REWRITER_LOG' ) ) {
 					error_log( 'REWROTE: ' . $s );
 				}
