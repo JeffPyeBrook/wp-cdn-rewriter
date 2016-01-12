@@ -48,6 +48,8 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 		add_filter( 'plugins_url', 'wpcdn_plugins_url', WPCDN_FILTER_PRIORITY, 3 );
 		add_filter( 'includes_url', 'wpcdn_includes_url', WPCDN_FILTER_PRIORITY, 2 );
 
+		add_filter( 'wpsc_product_image', 'wpcdn_wpsc_product_image', WPCDN_FILTER_PRIORITY, 2 );
+
 		// we can do some special things if the autoptimize plugin is installed and enabled
 		if ( function_exists( 'autoptimize_end_buffering' ) ) {
 			add_filter( 'autoptimize_filter_base_replace_cdn', 'wpcdn_autoptimize_filter_base_replace_cdn', WPCDN_FILTER_PRIORITY, 1 );
@@ -66,6 +68,19 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 	}
 
 	add_action( 'plugins_loaded', 'wpcdn_setup_rewrites' );
+
+	function wpcdn_wpsc_product_image( $url, $attachment_id ) {
+		$rewritten_url = cdn_replace_direct_url_with_cdn( $url );
+
+		if ( $rewritten_url != $url ) {
+			$url = $rewritten_url;
+			if ( defined( 'CDN_REWRITER_LOG' ) ) {
+				error_log( __FUNCTION__ . ' ' . $rewritten_url );
+			}
+		}
+
+		return $url;
+	}
 
 
 	/**
@@ -467,6 +482,7 @@ if ( defined( 'PBCI_CDN_FROM' ) && defined( 'PBCI_CDN_TO' ) ) {
 			 * make sure the urls is rewritten to our cdn even if it was rewritten using the
 			 * autoptimize cdn setting
 			 */
+			$rewritten_url = $url;
 			$h = parse_url( $url, PHP_URL_HOST );
 			if ( ! empty( $h ) ) {
 				$site_url = parse_url( get_site_url(), PHP_URL_HOST );
